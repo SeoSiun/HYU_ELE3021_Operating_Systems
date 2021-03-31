@@ -1,10 +1,12 @@
 #include "types.h"
 #include "defs.h"
 
+
 int
 mySyscall(int trapno)
 {
-	cprintf("user interrupt %d called!\n",&trapno);
+	cprintf("user interrupt %d called!\n",trapno);
+	exit();
 	return 0;
 }
 
