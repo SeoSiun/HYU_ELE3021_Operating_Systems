@@ -49,7 +49,7 @@ trap(struct trapframe *tf)
 
   if(tf->trapno == MY_SYSCALL){
     myproc()->tf = tf;
-    mySyscall(tf->trapno);
+    mysyscall();
     return;
   }
 

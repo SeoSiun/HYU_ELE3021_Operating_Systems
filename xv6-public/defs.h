@@ -120,6 +120,8 @@ void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
 void            yield(void);
+int		getppid(void);
+int		mysyscall(void);
 
 // swtch.S
 void            swtch(struct context**, struct context*);
@@ -188,9 +190,5 @@ void            clearpteu(pde_t *pgdir, char *uva);
 
 //prac_syscall.c
 int		myfunction(char*);
-//getppid.c
-int		getppid(void);
-//my_syscall.c
-int		mySyscall(int);
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

@@ -89,3 +89,15 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+int
+sys_getppid(void)
+{
+	return getppid();
+}
+
+int 
+sys_mysyscall(void)
+{
+	return mysyscall();
+}
