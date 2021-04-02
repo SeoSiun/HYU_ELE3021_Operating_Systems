@@ -49,8 +49,8 @@ trap(struct trapframe *tf)
   }
 
   if(tf->trapno == 128){
-    myproc()->tf = tf;
-    mysyscall();
+    cprintf("user interrupt %d called!\n",tf->trapno);
+    exit();
     return;
   }
 

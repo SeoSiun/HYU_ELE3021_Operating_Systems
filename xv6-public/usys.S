@@ -31,5 +31,3 @@ SYSCALL(sleep)
 SYSCALL(uptime)
 SYSCALL(myfunction)
 SYSCALL(getppid)
-SYSCALL(mysyscall)
-

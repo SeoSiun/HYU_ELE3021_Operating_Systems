@@ -96,8 +96,3 @@ sys_getppid(void)
 	return getppid();
 }
 
-int 
-sys_mysyscall(void)
-{
-	return mysyscall();
-}

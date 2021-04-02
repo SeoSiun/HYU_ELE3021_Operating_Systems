@@ -538,11 +538,3 @@ getppid(void)
 {
 	return myproc()->parent->pid;
 }
-
-int
-mysyscall(void)
-{
-        cprintf("user interrupt %d called!\n",myproc()->tf->trapno);
-        exit();
-        return 0;
-}
