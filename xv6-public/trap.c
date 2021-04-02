@@ -23,7 +23,8 @@ tvinit(void)
   for(i = 0; i < 256; i++)
     SETGATE(idt[i], 0, SEG_KCODE<<3, vectors[i], 0);
   SETGATE(idt[T_SYSCALL], 1, SEG_KCODE<<3, vectors[T_SYSCALL], DPL_USER);
-  SETGATE(idt[MY_SYSCALL],1, SEG_KCODE<<3, vectors[MY_SYSCALL], DPL_USER);
+  SETGATE(idt[128], 1, SEG_KCODE<<3, vectors[128], DPL_USER);
+
   initlock(&tickslock, "time");
 }
 
@@ -47,7 +48,7 @@ trap(struct trapframe *tf)
     return;
   }
 
-  if(tf->trapno == MY_SYSCALL){
+  if(tf->trapno == 128){
     myproc()->tf = tf;
     mysyscall();
     return;
