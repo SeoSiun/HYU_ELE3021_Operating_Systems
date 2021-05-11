@@ -311,6 +311,55 @@ wait(void)
   }
 }
 
+
+#ifdef FCFS_SCHED
+void
+scheduler(void)
+{
+  struct proc *p;
+  struct cpu *c = mycpu();
+  struct proc* firstProc=0;
+  c->proc = 0;
+
+  for(;;){
+    // Enable interrupts on this processor.
+    sti();
+
+    // Loop over process table looking for process to run.
+    acquire(&ptable.lock);
+
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->state != RUNNABLE)
+        continue;
+      if(firstProc==0){
+        firstProc=p;
+      }
+      else{
+      	if(p->pid < firstProc->pid){
+          firstProc=p;
+        }
+      }
+      // Switch to chosen process.  It is the process's job
+      // to release ptable.lock and then reacquire i        
+      // before jumping back to us.
+      c->proc = firstProc;
+      switchuvm(firstProc);
+      firstProc->state = RUNNING;
+
+      swtch(&(c->scheduler), firstProc->context);
+      switchkvm();
+
+      // Process is done running for now.
+      // It should have changed its p->state before coming back.
+      c->proc = 0;
+    }
+
+    release(&ptable.lock);
+  }
+}
+
+
+#else
 //PAGEBREAK: 42
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
@@ -332,12 +381,13 @@ scheduler(void)
 
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
+
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state != RUNNABLE)
         continue;
 
       // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
+      // to release ptable.lock and then reacquire i        
       // before jumping back to us.
       c->proc = p;
       switchuvm(p);
@@ -350,10 +400,13 @@ scheduler(void)
       // It should have changed its p->state before coming back.
       c->proc = 0;
     }
+    
     release(&ptable.lock);
 
   }
 }
+
+#endif
 
 // Enter scheduler.  Must hold only ptable.lock
 // and have changed proc->state. Saves and restores

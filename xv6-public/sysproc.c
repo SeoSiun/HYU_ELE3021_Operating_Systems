@@ -96,3 +96,9 @@ sys_getppid(void)
 	return getppid();
 }
 
+int
+sys_yield(void)
+{
+  yield();
+  return 0;
+}

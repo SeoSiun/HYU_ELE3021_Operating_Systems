@@ -10,10 +10,12 @@ void *PrintHello(void *threadid) {
 }
 
 int main (int argc, char *argv[]) {
+    //pthread_t : sturct that have info about current thread
     pthread_t threads[NUM_THREADS];
     int rc;
     long t;
     for(t = 0; t < NUM_THREADS; t++) {
+	//create thread
         rc = pthread_create(&threads[t], NULL, PrintHello, (void *)t);
         printf("In main: creating thread %ld thread id: %ld\n", t, threads[t]);
         if (rc) {
