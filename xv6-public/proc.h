@@ -51,6 +51,7 @@ struct proc {
   char name[16];               // Process name (debugging)
   int ctick;                   // tick when process created
   int stick;		       // tick when process scheduled	       
+  int isYield;
 };
 
 // Process memory is laid out contiguously, low addresses first:

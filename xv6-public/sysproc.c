@@ -99,6 +99,7 @@ sys_getppid(void)
 int
 sys_yield(void)
 {
+  myproc()->isYield=1;
   yield();
   return 0;
 }
