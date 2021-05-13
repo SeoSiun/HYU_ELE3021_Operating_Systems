@@ -366,6 +366,69 @@ wait(void)
     }
   }
 
+#elif MULTILEVEL_SCHED
+  void
+  scheduler(void)
+  {
+    struct proc *p;
+    struct cpu *c = mycpu();
+    c->proc = 0;
+
+    int cnt;
+    struct proc *fcfs;
+
+    for(;;){
+      // Enable interrupts on this processor.
+      sti();
+
+      // Loop over process table looking for process to run.
+      acquire(&ptable.lock);
+      cnt=0;
+      fcfs=0;
+      for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+        if(p->state != RUNNABLE)
+          continue;
+
+	if(p->pid%2==1){
+	  if(fcfs==0) fcfs=p;
+	  else if(fcfs->pid > p->pid) fcfs=p;
+	  continue;
+	}
+
+        // Switch to chosen process.  It is the process's job
+        // to release ptable.lock and then reacquire i        
+        // before jumping back to us.
+        c->proc = p;
+        switchuvm(p);
+        p->state = RUNNING;
+
+        swtch(&(c->scheduler), p->context);
+        switchkvm();
+
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        c->proc = 0;
+	cnt++;
+	
+      }
+      if(cnt==0 && fcfs!=0){
+	p=fcfs;
+	c->proc = p;
+        switchuvm(p);
+        p->state = RUNNING;
+
+        swtch(&(c->scheduler), p->context);
+        switchkvm();
+	
+	c->proc=0;
+      }
+
+      release(&ptable.lock);
+
+    }
+  }
+
+
 
 #else
 //PAGEBREAK: 42
