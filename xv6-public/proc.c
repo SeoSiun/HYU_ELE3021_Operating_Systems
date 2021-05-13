@@ -13,7 +13,6 @@ struct {
 } ptable;
 
 static struct proc *initproc;
-struct proc *curproc=0;
 
 int nextpid = 1;
 extern void forkret(void);
@@ -323,6 +322,7 @@ wait(void)
     struct proc *p;
     struct cpu *c = mycpu();
     c->proc = 0;
+    struct proc * tmp=0;
     
     for(;;){
       // Enable interrupts on this processor.
@@ -331,36 +331,38 @@ wait(void)
       // Loop over process table looking for process to run.
       acquire(&ptable.lock);
       struct proc *firstProc=0;
-      if(curproc!=0 && curproc->state==RUNNABLE && curproc->isYield==0){
-	firstProc=curproc;
-//	cprintf("curproc: %d\n",curproc->pid);
-      }
-      else{
-        for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-          if(p->state != RUNNABLE)
-            continue;
-	  if(p->isYield==1){
-            p->isYield=0;
-	    continue;
- 	  }
-          if(firstProc==0){
+      int max=0;
+      for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+	if(p->pid>max) max=p->pid;
+        if(p->state != RUNNABLE)
+          continue;
+	if(p->isYield==1){
+	  if(tmp==0) tmp=p;
+	  if(tmp!=0 && p->pid!= tmp->pid){
+	    if(firstProc!=0 && tmp->pid<firstProc->pid && tmp->state==RUNNABLE) firstProc=tmp;
+	    if(firstProc==0 && tmp->state==RUNNABLE) firstProc=tmp;
+	    tmp->isYield=0;
+	    tmp=p;
+	  }
+	  continue;
+ 	}
+        if(firstProc==0){
+          firstProc=p;
+        }
+        else{
+    	  if(p->pid < firstProc->pid){
             firstProc=p;
           }
-          else{
-    	    if(p->pid < firstProc->pid){
-              firstProc=p;
-             } 
-          }
         }
-  //      cprintf("not curproc: %d\n",firstProc->pid);
       }
+      if(tmp!=0 && tmp->isYield==1 && max==tmp->pid && tmp->state==RUNNABLE) firstProc=tmp;
   
       if(firstProc!=0){
         p=firstProc;
         // Switch to chosen process.  It is the process's job
         // to release ptable.lock and then reacquire i        
         // before jumping back to us.
-	
+
         c->proc = p;
         switchuvm(p);
         p->state = RUNNING;
@@ -371,10 +373,7 @@ wait(void)
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0;
-//	if((ticks-p->stick)>=200) p->state=ZOMBIE;
-	curproc=p;
-      }
-        
+      }        
       release(&ptable.lock);
     }
   }
@@ -513,7 +512,6 @@ sleep(void *chan, struct spinlock *lk)
   p->chan = chan;
   p->stick=0;
   p->state = SLEEPING;
-
   sched();
 
   // Tidy up.

@@ -100,6 +100,7 @@ int
 sys_yield(void)
 {
   myproc()->isYield=1;
+  myproc()->stick=0;
   yield();
   return 0;
 }
