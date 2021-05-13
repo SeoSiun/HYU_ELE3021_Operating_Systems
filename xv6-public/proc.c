@@ -373,6 +373,10 @@ wait(void)
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0;
+	if(tmp!=0 && p->state==SLEEPING){
+	  tmp->isYield=0;
+	  tmp=0;
+	}
 	if(p->stick!=0 && ticks-p->stick>=200){
 	  p->killed=1;
 	}
