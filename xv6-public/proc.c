@@ -89,7 +89,6 @@ found:
   p->state = EMBRYO;
   p->pid = nextpid++; 
   p->stick=0;
-  p->isYield=0;
 
   release(&ptable.lock);
 
@@ -321,7 +320,6 @@ wait(void)
     struct proc *p;
     struct cpu *c = mycpu();
     c->proc = 0;
-    struct proc * tmp=0;
     
     for(;;){
       // Enable interrupts on this processor.
@@ -330,22 +328,10 @@ wait(void)
       // Loop over process table looking for process to run.
       acquire(&ptable.lock);
       struct proc *firstProc=0;
-      int max=0;
       for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-	if(p->pid>max) max=p->pid;
 	if(p->state == SLEEPING) p->stick=0;
         if(p->state != RUNNABLE)
           continue;
-	if(p->isYield==1){
-	  if(tmp==0) tmp=p;
-	  if(tmp!=0 && p->pid!= tmp->pid){
-	    if(firstProc!=0 && tmp->pid<firstProc->pid && tmp->state==RUNNABLE) firstProc=tmp;
-	    if(firstProc==0 && tmp->state==RUNNABLE) firstProc=tmp;
-	    tmp->isYield=0;
-	    tmp=p;
-	  }
-	  continue;
- 	}
         if(firstProc==0){
           firstProc=p;
         }
@@ -355,8 +341,7 @@ wait(void)
           }
         }
       }
-      if(tmp!=0 && tmp->isYield==1 && max==tmp->pid && tmp->state==RUNNABLE) firstProc=tmp;
-  
+
       if(firstProc!=0){
         p=firstProc;
         // Switch to chosen process.  It is the process's job
@@ -373,10 +358,6 @@ wait(void)
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0;
-	if(tmp!=0 && p->state==SLEEPING){
-	  tmp->isYield=0;
-	  tmp=0;
-	}
 	if(p->stick!=0 && ticks-p->stick>=200){
 	  p->killed=1;
 	}
