@@ -87,8 +87,7 @@ allocproc(void)
 
 found:
   p->state = EMBRYO;
-  p->pid = nextpid++;
-  p->ctick = ticks;
+  p->pid = nextpid++; 
   p->stick=0;
   p->isYield=0;
 
@@ -334,6 +333,7 @@ wait(void)
       int max=0;
       for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
 	if(p->pid>max) max=p->pid;
+	if(p->state == SLEEPING) p->stick=0;
         if(p->state != RUNNABLE)
           continue;
 	if(p->isYield==1){
@@ -373,6 +373,9 @@ wait(void)
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0;
+	if(p->stick!=0 && ticks-p->stick>=200){
+	  p->killed=1;
+	}
       }        
       release(&ptable.lock);
     }
@@ -510,7 +513,6 @@ sleep(void *chan, struct spinlock *lk)
   }
   // Go to sleep.
   p->chan = chan;
-  p->stick=0;
   p->state = SLEEPING;
   sched();
 
