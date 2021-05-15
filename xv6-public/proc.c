@@ -10,6 +10,8 @@
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
+  struct proc* last;
+  int tick;
 } ptable;
 
 static struct proc *initproc;
@@ -350,7 +352,7 @@ wait(void)
         c->proc = p;
         switchuvm(p);
         p->state = RUNNING;
-	p->stick++;
+	if(p->stick==0) p->stick=ticks;
 
         swtch(&(c->scheduler), p->context);
         switchkvm();
@@ -359,7 +361,7 @@ wait(void)
         // It should have changed its p->state before coming back.
         c->proc = 0;
 
-	if(p->stick>=200){
+	if(p->stick!=0 && ticks-p->stick>=200){
           p->killed=1;
 	}	
       }        
@@ -440,17 +442,20 @@ wait(void)
       p->priority=0;
       p->stick=0;
     }
+    ptable.tick=0;
+    ptable.last=0;
+
   }
 
   int
   check_time_quantum(struct proc* p)
   {
-    if(p->stick == 4 && p->level==0){
+    if(ticks-p->stick >= 4 && p->level==0){
       p->level=1;
       p->stick=0;
       return 1;
     }
-    else if(p->stick==8 && p->level==1){
+    else if(ticks - p->stick>=8 && p->level==1){
       if(p->priority!=0) p->priority--;
       p->stick=0;
       return 1;
@@ -468,9 +473,9 @@ wait(void)
 
     struct proc *p1=0;
     struct proc *L1;
-    struct proc *last=0;
 
-    int tick=0;
+    ptable.last=0;
+    ptable.tick=0;
 
     for(;;){
       // Enable interrupts on this processor.
@@ -480,6 +485,13 @@ wait(void)
       acquire(&ptable.lock);
 
       L1=0;
+      p1=0;
+
+      if(ptable.tick==0) ptable.tick=ticks;
+      else if(ticks - ptable.tick>=200){
+//        cprintf("-------priority boosting-------\n");
+        priority_boosting();
+      }
 
       if(mono!=0 && mono->state==RUNNABLE){
 	p=mono;
@@ -494,15 +506,14 @@ wait(void)
         c->proc=0;
       }
       else{
-	if(last!=0 && last->yield==1){
-	  last->yield=0;
-	  last=0;
+	if(ptable.last!=0 && ptable.last->yield==1){
+	  ptable.last->yield=0;
+	  ptable.last=0;
 	}
-	if(last!=0 && last->state==RUNNABLE && last->level==0){
-	  p1=last;
+	if(ptable.last!=0 && ptable.last->state==RUNNABLE && ptable.last->level==0){
+	  p1=ptable.last;
         }
 	else{
-          int isL1=1;
           for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
             if(p->state != RUNNABLE)
               continue;
@@ -513,12 +524,12 @@ wait(void)
 	      else if(L1->priority==p->priority && L1->pid > p->pid) L1=p;
               continue;
             }
-	    isL1--;
             p1=p;
 	    break;
  	  }
-	  if(isL1){
-	    if(last!=0 && last->level==1 && last->state==RUNNABLE) p1=last;
+	  if(p1==0){
+	    if(ptable.last!=0 && ptable.last->level==1 && ptable.last->state==RUNNABLE)
+	      p1=ptable.last;
             else if(L1!=0) p1=L1;
 	  }
 	}
@@ -529,26 +540,18 @@ wait(void)
 	  switchuvm(p);
           p->state = RUNNING;
 
-//	  if(p->pid>13) cprintf("%d // %d\n",p->pid,p->level);
+//	  if(p->pid>3) cprintf("%d // %d\n",p->pid,p->level);
           swtch(&(c->scheduler), p->context);
           switchkvm();
 
           c->proc=0;
-          p->stick++;
 
-          last=p;
-          if(check_time_quantum(p)) last=0;
+          ptable.last=p;
+
+	  if(p->stick==0) p->stick=ticks;
+          else if(check_time_quantum(p)) ptable.last=0;
 	}
       }
-      tick++;
-
-      if(tick==200){
-//	if(p1!=0 && p1->pid>13) cprintf("-------priority boosting-------\n");
-        priority_boosting();
-        tick=0;
-	last=0;
-      }
-
       release(&ptable.lock);
     }
   }
@@ -804,13 +807,6 @@ setpriority(int pid, int priority)
   acquire(&ptable.lock);
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->pid==pid){
-
-      // not my child
-      //if(p->parent->pid != myproc()->pid){
-	//release(&ptable.lock);
-	//return -1;
-      //}
-      //success
       p->priority = priority;
       release(&ptable.lock);
       return 0;
