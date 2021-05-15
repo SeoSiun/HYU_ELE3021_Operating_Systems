@@ -99,7 +99,35 @@ sys_getppid(void)
 int
 sys_yield(void)
 {
-  myproc()->stick=0;
+  myproc()->yield=1;
   yield();
+  return 0;
+}
+
+int
+sys_getlev(void)
+{
+  return getlev();
+}
+
+int
+sys_setpriority()
+{
+  int pid, priority;
+  if(argint(0,&pid)<0)
+    return -1;
+  if(argint(1,&priority)<0)
+    return -1;
+  
+  return setpriority(pid,priority);
+}
+
+int
+sys_monopolize(void)
+{
+  int pass;
+  if(argint(0,&pass)<0)
+    return -1;
+  monopolize(pass);
   return 0;
 }
