@@ -823,22 +823,13 @@ getlev(void)
 int
 setpriority(int pid, int priority)
 {
-  struct proc* p;
-
   // wrong priority
   if(priority<0 || priority>10) return -2;
 
   acquire(&ptable.lock);
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-    if(p->pid==pid){
-      p->priority = priority;
-      release(&ptable.lock);
-      return 0;
-    }
-  }
-  //no exist pid
-  acquire(&ptable.lock);
-  return -1;
+  myproc()->priority = priority;
+  release(&ptable.lock);
+  return 0;
 }
 
 void
