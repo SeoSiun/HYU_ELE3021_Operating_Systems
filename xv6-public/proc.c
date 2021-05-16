@@ -362,7 +362,7 @@ wait(void)
         // It should have changed its p->state before coming back.
         c->proc = 0;
 
-	// if proc run while 200ticks, kill
+	// if proc run while more than 200ticks, kill
 	if(p->stick!=0 && ticks-p->stick>=200){
           p->killed=1;
 	}	
@@ -450,13 +450,13 @@ wait(void)
   int
   check_time_quantum(struct proc* p)
   {
-    // proc in L0 run for quantum -> go to L1 & reset stick
+    // proc in L0 run more than 4ticks -> go to L1 & reset stick
     if(p->stick >= 4 && p->level==0){
       p->level=1;
       p->stick=0;
       return 1;
     }
-    // porc in L1 run for quantum -> decrease priority & reset stick
+    // porc in L1 run more than 8ticks -> decrease priority & reset stick
     else if(p->stick>=8 && p->level==1){
       if(p->priority!=0) p->priority--;
       p->stick=0;
@@ -472,10 +472,10 @@ wait(void)
     struct cpu *c = mycpu();
     c->proc = 0;
 
-    struct proc *select=0;
     struct proc *L1;
 
     int tick=0;
+    int cnt=0;
 
     for(;;){
       // Enable interrupts on this processor.
@@ -485,14 +485,13 @@ wait(void)
       acquire(&ptable.lock);
 
       L1=0;
-      select=0;
 
       if(tick>=200){
         priority_boosting();
 	tick=0;
       }
 
-      // user called monopolize -> run proc mono
+      // monopolize : run proc mono
       if(mono!=0 && mono->state==RUNNABLE){
 	p=mono;
 	c->proc = p;
@@ -504,7 +503,9 @@ wait(void)
 
         c->proc=0;
       }
+      // MLFQ
       else{
+	cnt=0;
         for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
           if(p->state != RUNNABLE)
             continue;
@@ -516,21 +517,42 @@ wait(void)
 	    else if(L1->priority==p->priority && L1->pid > p->pid) L1=p;
             continue;
           }
+          // run proc for 4ticks
+          for(int i=0; i<4; i++){
+            if(p->state!=RUNNABLE) break;
+            c->proc = p;
+            switchuvm(p);
+            p->state = RUNNING;
 
-	  // select proc in L0
-          select=p;
-	  break;
- 	}
+            swtch(&(c->scheduler), p->context);
+            switchkvm();
+            c->proc=0;
 
+            // run time for proc
+            p->stick++;
+
+            // called monopolize() -> break
+            if(mono!=0) break;
+            // user call system call yield -> break
+            if(p->yield==1){
+              check_time_quantum(p);
+              p->yield=0;
+              break;
+            }
+            // stick == quantum -> break
+            if(check_time_quantum(p)) break;
+            tick++;
+          }
+	  cnt++;
+	  if(mono!=0) break;
+        }
 	// no RUNNABLE proc in L0
-	// select high priority proc in L1
-	if(select==0 && L1!=0) select=L1;
-	
-	if(select!=0){
-	  p=select;
+	// run high priority proc in L1
+	if(cnt==0 && L1!=0) {
+	  p=L1;
 	  
-	  // run proc for quantum
-	  for(int i=0; i<(p->level+1)*4; i++){
+	  // run proc for 8ticks
+	  for(int i=0; i<8; i++){
 	    if(p->state!=RUNNABLE) break;
 	    c->proc = p;
             switchuvm(p);
@@ -540,18 +562,14 @@ wait(void)
             switchkvm();
             c->proc=0;
 
-	    // num of run time 
 	    p->stick++;
 
-	    // called monopolize() -> break
 	    if(mono!=0) break;
-	    // user call system call yield -> break
 	    if(p->yield==1){
 	      check_time_quantum(p);
 	      p->yield=0;
 	      break;
 	    }
-	    // stick == quantum -> break
 	    if(check_time_quantum(p)) break;
 	    tick++;
 	  }
