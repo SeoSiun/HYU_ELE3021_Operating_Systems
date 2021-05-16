@@ -10,8 +10,6 @@
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
-  struct proc* last;
-  int tick;
 } ptable;
 
 static struct proc *initproc;
@@ -335,7 +333,9 @@ wait(void)
       acquire(&ptable.lock);
       struct proc *firstProc=0;
       for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+	// if proc is SLEEPING -> reset stick
         if(p->state == SLEEPING) p->stick=0;
+
         if(p->state != RUNNABLE)
           continue;
         if(firstProc==0){
@@ -352,6 +352,7 @@ wait(void)
         c->proc = p;
         switchuvm(p);
         p->state = RUNNING;
+	// save ticks when proc in scheduler first
 	if(p->stick==0) p->stick=ticks;
 
         swtch(&(c->scheduler), p->context);
@@ -361,6 +362,7 @@ wait(void)
         // It should have changed its p->state before coming back.
         c->proc = 0;
 
+	// if proc run while 200ticks, kill
 	if(p->stick!=0 && ticks-p->stick>=200){
           p->killed=1;
 	}	
@@ -392,15 +394,14 @@ wait(void)
         if(p->state != RUNNABLE)
           continue;
 
+	// find least pid proc (for odd pid)
 	if(p->pid%2==1){
 	  if(fcfs==0) fcfs=p;
 	  else if(fcfs->pid > p->pid) fcfs=p;
 	  continue;
 	}
 
-        // Switch to chosen process.  It is the process's job
-        // to release ptable.lock and then reacquire i        
-        // before jumping back to us.
+        // run proc if pid == even
         c->proc = p;
         switchuvm(p);
         p->state = RUNNING;
@@ -414,6 +415,8 @@ wait(void)
 	cnt++;
 	
       }
+      // no RUNNABLE proc in RR (even)
+      // run least pid proc (odd)
       if(cnt==0 && fcfs!=0){
 	p=fcfs;
 
@@ -442,27 +445,25 @@ wait(void)
       p->priority=0;
       p->stick=0;
     }
-    ptable.tick=0;
-    ptable.last=0;
-
   }
 
   int
   check_time_quantum(struct proc* p)
   {
-    if(ticks-p->stick >= 4 && p->level==0){
+    // proc in L0 run for quantum -> go to L1 & reset stick
+    if(p->stick >= 4 && p->level==0){
       p->level=1;
       p->stick=0;
       return 1;
     }
-    else if(ticks - p->stick>=8 && p->level==1){
+    // porc in L1 run for quantum -> decrease priority & reset stick
+    else if(p->stick>=8 && p->level==1){
       if(p->priority!=0) p->priority--;
       p->stick=0;
       return 1;
     }
     return 0;
   }
-
 
   void
   scheduler(void)
@@ -471,11 +472,10 @@ wait(void)
     struct cpu *c = mycpu();
     c->proc = 0;
 
-    struct proc *p1=0;
+    struct proc *select=0;
     struct proc *L1;
 
-    ptable.last=0;
-    ptable.tick=0;
+    int tick=0;
 
     for(;;){
       // Enable interrupts on this processor.
@@ -485,73 +485,79 @@ wait(void)
       acquire(&ptable.lock);
 
       L1=0;
-      p1=0;
+      select=0;
 
-      if(ptable.tick==0) ptable.tick=ticks;
-      else if(ticks - ptable.tick>=200){
-//        cprintf("-------priority boosting-------\n");
+      if(tick>=200){
         priority_boosting();
+	tick=0;
       }
 
+      // user called monopolize -> run proc mono
       if(mono!=0 && mono->state==RUNNABLE){
 	p=mono;
-
 	c->proc = p;
         switchuvm(p);
         p->state = RUNNING;
-
+	
         swtch(&(c->scheduler), p->context);
         switchkvm();
 
         c->proc=0;
       }
       else{
-	if(ptable.last!=0 && ptable.last->yield==1){
-	  ptable.last->yield=0;
-	  ptable.last=0;
-	}
-	if(ptable.last!=0 && ptable.last->state==RUNNABLE && ptable.last->level==0){
-	  p1=ptable.last;
-        }
-	else{
-          for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-            if(p->state != RUNNABLE)
-              continue;
+        for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+          if(p->state != RUNNABLE)
+            continue;
 
-            if(p->level==1){
-              if(L1==0) L1=p;
-              else if(L1->priority < p->priority) L1=p;
-	      else if(L1->priority==p->priority && L1->pid > p->pid) L1=p;
-              continue;
-            }
-            p1=p;
-	    break;
- 	  }
-	  if(p1==0){
-	    if(ptable.last!=0 && ptable.last->level==1 && ptable.last->state==RUNNABLE)
-	      p1=ptable.last;
-            else if(L1!=0) p1=L1;
+	  // find high priority proc in L1
+          if(p->level==1){
+            if(L1==0) L1=p;
+            else if(L1->priority < p->priority) L1=p;
+	    else if(L1->priority==p->priority && L1->pid > p->pid) L1=p;
+            continue;
+          }
+
+	  // select proc in L0
+          select=p;
+	  break;
+ 	}
+
+	// no RUNNABLE proc in L0
+	// select high priority proc in L1
+	if(select==0 && L1!=0) select=L1;
+	
+	if(select!=0){
+	  p=select;
+	  
+	  // run proc for quantum
+	  for(int i=0; i<(p->level+1)*4; i++){
+	    if(p->state!=RUNNABLE) break;
+	    c->proc = p;
+            switchuvm(p);
+            p->state = RUNNING;
+
+            swtch(&(c->scheduler), p->context);
+            switchkvm();
+            c->proc=0;
+
+	    // num of run time 
+	    p->stick++;
+
+	    // called monopolize() -> break
+	    if(mono!=0) break;
+	    // user call system call yield -> break
+	    if(p->yield==1){
+	      check_time_quantum(p);
+	      p->yield=0;
+	      break;
+	    }
+	    // stick == quantum -> break
+	    if(check_time_quantum(p)) break;
+	    tick++;
 	  }
 	}
-	if(p1!=0){
-	  p=p1;
-
-	  c->proc = p;
-	  switchuvm(p);
-          p->state = RUNNING;
-
-//	  if(p->pid>3) cprintf("%d // %d\n",p->pid,p->level);
-          swtch(&(c->scheduler), p->context);
-          switchkvm();
-
-          c->proc=0;
-
-          ptable.last=p;
-
-	  if(p->stick==0) p->stick=ticks;
-          else if(check_time_quantum(p)) ptable.last=0;
-	}
       }
+      tick++;
       release(&ptable.lock);
     }
   }
@@ -821,8 +827,9 @@ void
 monopolize(int password)
 {
   if(password == 2019019016){
-    if(mono==0)
+    if(mono==0){
       mono = myproc();
+    }
     else
       mono=0;
   }
