@@ -851,6 +851,7 @@ monopolize(int password)
     if(mono!=0) mono=0;
     acquire(&ptable.lock);
     myproc()->killed=1;
+    cprintf("wrong password, process was killed.\n");
     release(&ptable.lock);
   }
 }
