@@ -839,11 +839,18 @@ monopolize(int password)
     if(mono==0){
       mono = myproc();
     }
-    else
+    else{
+      acquire(&ptable.lock);
+      mono->level=0;
+      mono->priority=0;
       mono=0;
+      release(&ptable.lock);
+    }
   }
   else{
     if(mono!=0) mono=0;
+    acquire(&ptable.lock);
     myproc()->killed=1;
+    release(&ptable.lock);
   }
 }
