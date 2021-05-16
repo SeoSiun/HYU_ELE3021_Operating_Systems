@@ -93,6 +93,7 @@ found:
   p->stick=0;
   p->level=0;
   p->priority=0;
+  p->yield=0;
 
   release(&ptable.lock);
 
